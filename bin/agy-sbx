@@ -9,11 +9,13 @@
 
 set -euo pipefail
 
-# Terminal colors (tuned for high-contrast visibility on dark/black backgrounds)
+# Terminal colors (tuned for high-contrast visibility on dark/black backgrounds - no dark blues)
 RED='\033[38;5;203m'       # Bright coral red
 GREEN='\033[38;5;120m'     # Bright mint green
-BLUE='\033[38;5;75m'       # Vibrant sky blue (replaces dark blue ANSI 34)
+CYAN='\033[38;5;45m'       # Crisp, luminous electric cyan (replaces all blue)
 YELLOW='\033[38;5;221m'    # Warm amber gold
+PURPLE='\033[38;5;141m'    # Soft lilac / violet
+MUTED='\033[38;5;246m'     # Clean silver gray
 BOLD='\033[1m'
 NC='\033[0m'               # No Color
 
@@ -26,7 +28,7 @@ die() {
 }
 
 info() {
-    printf "${BLUE}[INFO]${NC} %s\n" "$*" >&2
+    printf "${CYAN}[INFO]${NC} %s\n" "$*" >&2
 }
 
 success() {
@@ -186,7 +188,7 @@ worktree_list() {
             local last_commit
             last_commit="$(git -C "$wt" log -1 --format="%h - %s (%cr)" 2>/dev/null || echo "No commits")"
 
-            echo -e "  • ${BOLD}$task${NC} [branch: ${BLUE}$branch${NC}]"
+            echo -e "  • ${BOLD}$task${NC} [branch: ${PURPLE}$branch${NC}]"
             echo -e "    Path:   $wt"
             echo -e "    Status: $status_text"
             echo -e "    Commit: $last_commit"
