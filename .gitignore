@@ -1,0 +1,23 @@
+# Git Worktrees
+.worktrees/
+
+# Logs & Temporary
+*.log
+.tmp/
+scratch/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.DS_Store
+.vscode/
+.idea/
+
+# Container & Caches
+.cache/
+__pycache__/
+node_modules/
+
