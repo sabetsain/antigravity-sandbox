@@ -9,13 +9,13 @@
 
 set -euo pipefail
 
-# Terminal colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
+# Terminal colors (tuned for high-contrast visibility on dark/black backgrounds)
+RED='\033[38;5;203m'       # Bright coral red
+GREEN='\033[38;5;120m'     # Bright mint green
+BLUE='\033[38;5;75m'       # Vibrant sky blue (replaces dark blue ANSI 34)
+YELLOW='\033[38;5;221m'    # Warm amber gold
 BOLD='\033[1m'
-NC='\033[0m' # No Color
+NC='\033[0m'               # No Color
 
 # ------------------------------------------------------------------------------
 # Logging Helpers
@@ -307,6 +307,12 @@ sandbox_append_mounts() {
     if [ -f "$HOME/.gitconfig" ]; then
         mount_args+=("-v" "$HOME/.gitconfig:/home/developer/.gitconfig:ro")
     fi
+
+    # Forward terminal and color capabilities for black/dark terminal backgrounds
+    env_args+=(
+        "-e" "TERM=${TERM:-xterm-256color}"
+        "-e" "COLORTERM=${COLORTERM:-truecolor}"
+    )
 
     # Forward API keys if set on host
     if [ -n "${GEMINI_API_KEY:-}" ]; then
