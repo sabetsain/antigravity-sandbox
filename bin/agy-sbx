@@ -391,13 +391,22 @@ sandbox_exec() {
 
     if [ "$is_shell" = true ]; then
         info "Launching interactive debugging shell in sandbox container..."
-        exec "$runtime" run \
+        local accent_color="${AGY_ACCENT_COLOR:-#38bdf8}"
+        if [ -t 1 ]; then
+            printf "\033]4;4;%s\007" "$accent_color"
+        fi
+        local exit_code=0
+        "$runtime" run \
             "${runtime_flags[@]}" \
             "${mount_args[@]}" \
             ${env_args[@]+"${env_args[@]}"} \
             --entrypoint /bin/bash \
             "$image" \
-            -i
+            -i || exit_code=$?
+        if [ -t 1 ]; then
+            printf "\033]104;4\007" 2>/dev/null || true
+        fi
+        exit "$exit_code"
     fi
 
     # Agent execution mode
@@ -419,14 +428,29 @@ sandbox_exec() {
         container_cmd+=("${extra_args[@]}")
     fi
 
+    # Remap ANSI color 4 (dark blue) dynamically to luminous sky blue (#38bdf8)
+    # so that agy's hardcoded dark blue renders with high contrast on black backgrounds.
+    local accent_color="${AGY_ACCENT_COLOR:-#38bdf8}"
+    if [ -t 1 ]; then
+        printf "\033]4;4;%s\007" "$accent_color"
+    fi
+
     info "Launching ephemeral sandbox container..."
-    exec "$runtime" run \
+    local exit_code=0
+    "$runtime" run \
         --entrypoint "" \
         "${runtime_flags[@]}" \
         "${mount_args[@]}" \
         ${env_args[@]+"${env_args[@]}"} \
         "$image" \
-        "${container_cmd[@]}"
+        "${container_cmd[@]}" || exit_code=$?
+
+    # Restore default terminal color 4 on exit
+    if [ -t 1 ]; then
+        printf "\033]104;4\007" 2>/dev/null || true
+    fi
+
+    exit "$exit_code"
 }
 
 # ==============================================================================
