@@ -31,9 +31,10 @@ case "${1:-}" in
         echo "Usage: agy [options] [command]"
         echo ""
         echo "Options:"
-        echo "  --auto-approve    Execute operations without confirmation prompts"
-        echo "  -v, --version     Display version information"
-        echo "  -h, --help        Display this help menu"
+        echo "  --dangerously-skip-permissions  Execute operations without confirmation prompts"
+        echo "  --auto-approve                  Execute operations without confirmation prompts"
+        echo "  -v, --version                   Display version information"
+        echo "  -h, --help                      Display this help menu"
         exit 0
         ;;
     *)

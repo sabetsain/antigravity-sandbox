@@ -90,7 +90,7 @@ worktree_sanitize_name() {
     echo "$name"
 }
 
-worktree_acquire() {
+worktree_create() {
     local task_name="$1"
     worktree_ensure_repo
     local git_root
@@ -100,14 +100,12 @@ worktree_acquire() {
     local worktree_dir="$git_root/.worktrees/$task_name"
     local branch_name="agent/$task_name"
 
+    if [ -d "$worktree_dir" ]; then
+        die "Worktree for task '$task_name' already exists at '$worktree_dir'. Use 'agy-sbx open $task_name' to attach."
+    fi
+
     worktree_ensure_cleanliness "$git_root"
     mkdir -p "$git_root/.worktrees"
-
-    if [ -d "$worktree_dir" ]; then
-        info "Attaching to existing worktree '$task_name' at $worktree_dir"
-        echo "$worktree_dir"
-        return 0
-    fi
 
     info "Creating Git worktree for branch '$branch_name' at '$worktree_dir'..."
     if git -C "$git_root" show-ref --verify --quiet "refs/heads/$branch_name"; then
@@ -119,6 +117,38 @@ worktree_acquire() {
 
     success "Worktree initialized at $worktree_dir"
     echo "$worktree_dir"
+}
+
+worktree_open() {
+    local task_name="$1"
+    worktree_ensure_repo
+    local git_root
+    git_root="$(worktree_get_root)"
+    task_name="$(worktree_sanitize_name "$task_name")"
+
+    local worktree_dir="$git_root/.worktrees/$task_name"
+
+    if [ ! -d "$worktree_dir" ]; then
+        die "Worktree for task '$task_name' does not exist at '$worktree_dir'. Use 'agy-sbx new $task_name' to create it."
+    fi
+
+    info "Attaching to existing worktree '$task_name' at $worktree_dir"
+    echo "$worktree_dir"
+}
+
+worktree_acquire() {
+    local task_name="$1"
+    worktree_ensure_repo
+    local git_root
+    git_root="$(worktree_get_root)"
+    task_name="$(worktree_sanitize_name "$task_name")"
+
+    local worktree_dir="$git_root/.worktrees/$task_name"
+    if [ -d "$worktree_dir" ]; then
+        worktree_open "$task_name"
+    else
+        worktree_create "$task_name"
+    fi
 }
 
 worktree_list() {
@@ -367,7 +397,7 @@ sandbox_exec() {
     done
 
     if [ "$has_approve_flag" = false ]; then
-        container_cmd+=("--auto-approve")
+        container_cmd+=("--dangerously-skip-permissions")
     fi
 
     if [ ${#extra_args[@]} -gt 0 ]; then
@@ -428,13 +458,10 @@ cmd_new() {
         shift
     fi
 
-    # Strip '--' separator if present
-    if [ $# -gt 0 ] && [ "$1" = "--" ]; then
-        shift
-    fi
+    [ "${1:-}" = "--" ] && shift
 
     local worktree_dir
-    worktree_dir="$(worktree_acquire "$task_name")"
+    worktree_dir="$(worktree_create "$task_name")"
     sandbox_exec "$worktree_dir" false "$@"
 }
 
@@ -446,12 +473,10 @@ cmd_open() {
     local task_name="$1"
     shift
 
-    if [ $# -gt 0 ] && [ "$1" = "--" ]; then
-        shift
-    fi
+    [ "${1:-}" = "--" ] && shift
 
     local worktree_dir
-    worktree_dir="$(worktree_acquire "$task_name")"
+    worktree_dir="$(worktree_open "$task_name")"
     sandbox_exec "$worktree_dir" false "$@"
 }
 
@@ -484,9 +509,7 @@ cmd_rm() {
 }
 
 cmd_current() {
-    if [ $# -gt 0 ] && [ "$1" = "--" ]; then
-        shift
-    fi
+    [ "${1:-}" = "--" ] && shift
 
     local target_dir
     target_dir="$(pwd)"
@@ -516,20 +539,25 @@ cmd_shell() {
 # ==============================================================================
 # Main Dispatch
 # ==============================================================================
+
+dispatch_context_aware() {
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        local current_dir
+        current_dir="$(pwd)"
+        if [[ "$current_dir" =~ /\.worktrees/ ]]; then
+            cmd_current "$@"
+        else
+            cmd_new "$@"
+        fi
+    else
+        cmd_current "$@"
+    fi
+}
+
 main() {
     # If no arguments provided
     if [ $# -eq 0 ]; then
-        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            local current_dir
-            current_dir="$(pwd)"
-            if [[ "$current_dir" =~ /\.worktrees/ ]]; then
-                cmd_current
-            else
-                cmd_new
-            fi
-        else
-            cmd_current
-        fi
+        dispatch_context_aware
         exit 0
     fi
 
@@ -565,17 +593,7 @@ main() {
             ;;
         -*)
             # Directly passed flags e.g. `agy-sbx -p "fix nav"`
-            if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-                local current_dir
-                current_dir="$(pwd)"
-                if [[ "$current_dir" =~ /\.worktrees/ ]]; then
-                    cmd_current "$@"
-                else
-                    cmd_new "$@"
-                fi
-            else
-                cmd_current "$@"
-            fi
+            dispatch_context_aware "$@"
             ;;
         *)
             # Passed task name e.g. `agy-sbx my-task`
@@ -583,11 +601,10 @@ main() {
                 local git_root
                 git_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
                 local sanitized_cmd="${command%/}"
+                shift
                 if [ -d "$git_root/.worktrees/$sanitized_cmd" ]; then
-                    shift
                     cmd_open "$sanitized_cmd" "$@"
                 else
-                    shift
                     cmd_new "$sanitized_cmd" "$@"
                 fi
             else
