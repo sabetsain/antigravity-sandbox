@@ -296,6 +296,8 @@ sandbox_append_mounts() {
     local target_workspace="$1"
 
     mkdir -p "$HOME/.gemini"
+    # Ensure macOS virtiofs host files are readable/writable by developer user in container
+    chmod -R go+rwX "$HOME/.gemini" 2>/dev/null || true
 
     mount_args+=(
         "-v" "${target_workspace}:/workspace:rw"
@@ -304,6 +306,11 @@ sandbox_append_mounts() {
 
     if [ -f "$HOME/.gitconfig" ]; then
         mount_args+=("-v" "$HOME/.gitconfig:/home/developer/.gitconfig:ro")
+    fi
+
+    # Forward API keys if set on host
+    if [ -n "${GEMINI_API_KEY:-}" ]; then
+        env_args+=("-e" "GEMINI_API_KEY=$GEMINI_API_KEY")
     fi
 
     # SSH Authentication Strategy:
