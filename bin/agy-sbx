@@ -270,7 +270,7 @@ sandbox_resolve_image() {
         repo_name="$(basename "$git_root" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')"
         local image_tag="${repo_name}-sandbox:latest"
         info "Found custom Dockerfile at $custom_dockerfile. Building/verifying image '$image_tag'..."
-        "$runtime" build -t "$image_tag" -f "$custom_dockerfile" "$git_root"
+        "$runtime" build -t "$image_tag" -f "$custom_dockerfile" "$git_root" >&2
         echo "$image_tag"
         return
     fi
@@ -281,7 +281,7 @@ sandbox_resolve_image() {
         warn "Universal image '$universal_image' not found locally."
         if [ -f "$PROJECT_ROOT/Dockerfile" ]; then
             info "Building '$universal_image' from $PROJECT_ROOT/Dockerfile..."
-            "$runtime" build -t "$universal_image" "$PROJECT_ROOT"
+            "$runtime" build -t "$universal_image" "$PROJECT_ROOT" >&2
         else
             die "Universal image '$universal_image' not found and cannot locate template Dockerfile at $PROJECT_ROOT/Dockerfile."
         fi

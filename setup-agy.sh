@@ -4,7 +4,13 @@ set -euo pipefail
 # Try official installer
 if curl -fsSL https://antigravity.google/cli/install.sh 2>/dev/null | bash -s -- --dir /usr/local/bin 2>/dev/null; then
     echo "Antigravity CLI installed successfully via official installer."
-    chmod +x /usr/local/bin/agy 2>/dev/null || true
+    # Ensure binary is globally accessible to non-root users in /usr/local/bin
+    if [ -f /root/.local/bin/agy ] && [ ! -f /usr/local/bin/agy ]; then
+        cp /root/.local/bin/agy /usr/local/bin/agy
+    elif [ -f ~/.local/bin/agy ] && [ ! -f /usr/local/bin/agy ]; then
+        cp ~/.local/bin/agy /usr/local/bin/agy
+    fi
+    chmod 755 /usr/local/bin/agy 2>/dev/null || true
     exit 0
 fi
 
