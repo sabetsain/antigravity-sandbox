@@ -117,6 +117,9 @@ worktree_create() {
         git -C "$git_root" worktree add -b "$branch_name" "$worktree_dir" >&2
     fi
 
+    git -C "$worktree_dir" config core.sharedRepository all
+    git -C "$worktree_dir" config core.fileMode false
+
     success "Worktree initialized at $worktree_dir"
     echo "$worktree_dir"
 }
@@ -297,8 +300,21 @@ sandbox_resolve_image() {
 sandbox_append_mounts() {
     local target_workspace="$1"
 
-    mkdir -p "$HOME/.gemini"
     # Ensure macOS virtiofs host files are readable/writable by developer user in container
+    chmod -R a+rwX "$target_workspace" 2>/dev/null || true
+
+    if git -C "$target_workspace" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        local git_root common_git_dir
+        git_root="$(git -C "$target_workspace" rev-parse --show-toplevel 2>/dev/null || true)"
+        common_git_dir="$(git -C "$target_workspace" rev-parse --git-common-dir 2>/dev/null || true)"
+        [[ "$common_git_dir" != /* ]] && common_git_dir="$git_root/$common_git_dir"
+        if [ -d "$common_git_dir" ]; then
+            chmod -R a+rwX "$common_git_dir" 2>/dev/null || true
+            mount_args+=("-v" "$common_git_dir:$common_git_dir:rw")
+        fi
+    fi
+
+    mkdir -p "$HOME/.gemini"
     chmod -R go+rwX "$HOME/.gemini" 2>/dev/null || true
 
     mount_args+=(
@@ -306,8 +322,40 @@ sandbox_append_mounts() {
         "-v" "$HOME/.gemini:/home/developer/.gemini:rw"
     )
 
+    # Ensure host home paths (e.g. /Users/<name>/.gemini on macOS) resolve inside container
+    # for agent hooks (such as Herdr integration hooks) and tools configured with absolute host paths.
+    if [ "$HOME" != "/home/developer" ]; then
+        mount_args+=("-v" "$HOME/.gemini:$HOME/.gemini:rw")
+    fi
+
     if [ -f "$HOME/.gitconfig" ]; then
         mount_args+=("-v" "$HOME/.gitconfig:/home/developer/.gitconfig:ro")
+        if [ "$HOME" != "/home/developer" ]; then
+            mount_args+=("-v" "$HOME/.gitconfig:$HOME/.gitconfig:ro")
+        fi
+    fi
+
+    # Mount persistent handoffs directory if and only if it exists
+    local handoffs_dir=""
+    if [ -d "$HOME/.gemini/handoffs" ]; then
+        handoffs_dir="$HOME/.gemini/handoffs"
+    elif [ -d "$HOME/.handoffs" ]; then
+        handoffs_dir="$HOME/.handoffs"
+    fi
+
+    if [ -n "$handoffs_dir" ]; then
+        chmod -R a+rwX "$handoffs_dir" 2>/dev/null || true
+        mount_args+=("-v" "${handoffs_dir}:/tmp/handoffs:rw")
+        info "Mounted handoffs directory: $handoffs_dir -> /tmp/handoffs"
+
+        # Also map each handoff file into /tmp/ for direct /tmp/<file> references
+        for f in "$handoffs_dir"/*; do
+            if [ -f "$f" ]; then
+                local base
+                base="$(basename "$f")"
+                mount_args+=("-v" "${f}:/tmp/${base}:rw")
+            fi
+        done
     fi
 
     # Forward terminal and color capabilities for black/dark terminal backgrounds
@@ -346,7 +394,10 @@ sandbox_append_mounts() {
 sandbox_append_runtime_flags() {
     local runtime="$1"
 
-    runtime_flags+=("--rm")
+    runtime_flags+=(
+        "--rm"
+        "--init"
+    )
 
     # Dynamic TTY allocation: allocate -it only when connected to a real terminal
     if [ -t 0 ] && [ -t 1 ]; then
@@ -358,6 +409,8 @@ sandbox_append_runtime_flags() {
     runtime_flags+=(
         "--privileged"
     )
+
+    runtime_flags+=("--group-add" "65534")
 
     if [ "$runtime" = "podman" ]; then
         runtime_flags+=("--userns=keep-id")

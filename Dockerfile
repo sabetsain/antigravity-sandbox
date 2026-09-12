@@ -51,9 +51,10 @@ RUN if id -u ubuntu >/dev/null 2>&1; then \
         userdel -r ubuntu 2>/dev/null || true; \
     fi && \
     groupadd -g 1000 developer 2>/dev/null || true && \
-    useradd -u 1000 -g 1000 -m -s /bin/bash -c "Developer User" developer && \
+    useradd -u 1000 -g 1000 -G nogroup -m -s /bin/bash -c "Developer User" developer && \
     echo "developer ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/developer && \
-    chmod 0440 /etc/sudoers.d/developer
+    chmod 0440 /etc/sudoers.d/developer && \
+    mkdir -p /Users
 
 # Configure Rootless Podman & Subuid/Subgid ranges for nested container execution
 RUN echo "developer:100000:65536" > /etc/subuid && \
